@@ -1,0 +1,22 @@
+[build]
+  command = "pnpm run build"
+  publish = ".next"
+  functions = "netlify/functions"
+
+[dev]
+  command = "pnpm run dev"
+  port = 3000
+
+[headers]
+  [[headers.values]]
+    for = "/*"
+    [headers.values.headers]
+      X-Frame-Options = "DENY"
+      X-Content-Type-Options = "nosniff"
+      Referrer-Policy = "strict-origin-when-cross-origin"
+
+[redirects]
+  [[redirects.values]]
+    from = "/*"
+    to = "/"
+    status = 404
