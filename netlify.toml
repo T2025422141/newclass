@@ -8,15 +8,15 @@
   port = 3000
 
 [headers]
-  [[headers.values]]
+  [[headers]]
     for = "/*"
-    [headers.values.headers]
+    [headers.headers]
       X-Frame-Options = "DENY"
       X-Content-Type-Options = "nosniff"
       Referrer-Policy = "strict-origin-when-cross-origin"
 
 [redirects]
-  [[redirects.values]]
+  [[redirects]]
     from = "/*"
     to = "/"
     status = 404
