@@ -262,6 +262,17 @@ class MemoryStore {
     
     return initialLength !== this.classes.length;
   }
+
+  // 导出所有数据
+  exportAllData() {
+    return {
+      checkInRecords: this.checkInRecords,
+      leaveRecords: this.leaveRecords,
+      members: this.members,
+      classes: this.classes,
+      checkInSettings: this.checkInSettings
+    };
+  }
 }
 
 // 单例模式

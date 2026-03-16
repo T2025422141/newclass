@@ -13,7 +13,11 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
+
+// 导入 useIsMobile 钩子
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 interface ClassInfo {
   id: string;
@@ -25,10 +29,66 @@ interface ClassInfo {
   isNew?: boolean;
 }
 
+// 班级卡片组件
+const ClassCard = memo(({ cls, onClassClick }: { cls: ClassInfo; onClassClick: (id: string) => void }) => {
+  return (
+    <div
+      onClick={() => onClassClick(cls.id)}
+      className={`bg-white rounded-2xl p-5 shadow-sm cursor-pointer hover:shadow-md transition-all hover:-translate-y-1 active:scale-[0.98] ${cls.isVisited ? 'border-l-4 border-l-blue-500' : ''}`}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-lg text-gray-800">{cls.name}</span>
+            {cls.isVisited && (
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">已访问</span>
+            )}
+            {cls.isNew && (
+              <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">新</span>
+            )}
+          </div>
+          {cls.description && (
+            <div className="text-sm text-gray-500 mt-1 line-clamp-2">{cls.description}</div>
+          )}
+        </div>
+        <div className="text-3xl">📚</div>
+      </div>
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+        <div className="text-xs text-gray-400">
+          👥 {cls.memberCount} 名成员 · 📅 {new Date(cls.createdAt).toLocaleDateString()}
+        </div>
+        <div className="text-blue-500 text-sm font-medium">
+          进入 →
+        </div>
+      </div>
+    </div>
+  );
+});
+
+
 // 存储用户访问过的班级ID
 const VISITED_CLASSES_KEY = 'visited_classes';
 // 超级管理员密码（可修改）
 const SUPER_ADMIN_PASSWORD = 'admin888';
+
+// 安全地获取 localStorage 数据
+function getLocalStorageItem<T>(key: string, defaultValue: T): T {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+// 安全地设置 localStorage 数据
+function setLocalStorageItem(key: string, value: any): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // localStorage 不可用，忽略错误
+  }
+}
 
 export default function HomePage() {
   const [classes, setClasses] = useState<ClassInfo[]>([]);
@@ -50,21 +110,15 @@ export default function HomePage() {
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
   const [superAdminPwd, setSuperAdminPwd] = useState('');
   const [superAdminError, setSuperAdminError] = useState('');
-
-  useEffect(() => {
-    fetchAllClasses();
-  }, []);
+  
+  // 响应式布局
+  const isMobile = useIsMobile();
 
   // 获取所有班级
-  const fetchAllClasses = async () => {
+  const fetchAllClasses = useCallback(async () => {
     setLoading(true);
     try {
-      let visitedIds: string[] = [];
-      try {
-        visitedIds = JSON.parse(localStorage.getItem(VISITED_CLASSES_KEY) || '[]');
-      } catch {
-        // localStorage 不可用
-      }
+      const visitedIds: string[] = getLocalStorageItem<string[]>(VISITED_CLASSES_KEY, []);
       
       const res = await fetch('/api/class');
       const data = await res.json();
@@ -89,9 +143,21 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleCreate = async () => {
+  useEffect(() => {
+    fetchAllClasses();
+  }, [fetchAllClasses]);
+
+  const saveVisitedClass = useCallback((classId: string) => {
+    const visitedIds = getLocalStorageItem<string[]>(VISITED_CLASSES_KEY, []);
+    if (!visitedIds.includes(classId)) {
+      visitedIds.push(classId);
+      setLocalStorageItem(VISITED_CLASSES_KEY, visitedIds);
+    }
+  }, []);
+
+  const handleCreate = useCallback(async () => {
     if (!createName.trim()) {
       alert('请输入班级名称');
       return;
@@ -126,28 +192,16 @@ export default function HomePage() {
     } finally {
       setCreating(false);
     }
-  };
-
-  const saveVisitedClass = (classId: string) => {
-    try {
-      const visitedIds = JSON.parse(localStorage.getItem(VISITED_CLASSES_KEY) || '[]');
-      if (!visitedIds.includes(classId)) {
-        visitedIds.push(classId);
-        localStorage.setItem(VISITED_CLASSES_KEY, JSON.stringify(visitedIds));
-      }
-    } catch {
-      // localStorage 不可用
-    }
-  };
+  }, [createName, createDesc, createPwd, saveVisitedClass]);
 
   // 点击班级卡片 - 进入班级
-  const handleClassClick = (classId: string) => {
+  const handleClassClick = useCallback((classId: string) => {
     saveVisitedClass(classId);
     window.location.href = `/class/${classId}`;
-  };
+  }, [saveVisitedClass]);
 
   // 通过链接/ID加入班级
-  const handleJoinByLink = async () => {
+  const handleJoinByLink = useCallback(async () => {
     if (!joinClassId.trim()) {
       setJoinError('请输入班级链接或ID');
       return;
@@ -174,10 +228,10 @@ export default function HomePage() {
     } catch (error) {
       setJoinError('验证失败，请重试');
     }
-  };
+  }, [joinClassId, saveVisitedClass]);
 
   // 超级管理员登录
-  const handleSuperAdminLogin = () => {
+  const handleSuperAdminLogin = useCallback(() => {
     if (superAdminPwd === SUPER_ADMIN_PASSWORD) {
       try {
         sessionStorage.setItem('super_admin_verified', 'true');
@@ -188,12 +242,15 @@ export default function HomePage() {
     } else {
       setSuperAdminError('密码错误');
     }
-  };
+  }, [superAdminPwd]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-gray-600">加载中...</div>
+        <div className="flex flex-col items-center">
+          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+          <div className="text-gray-600 font-medium">加载中...</div>
+        </div>
       </div>
     );
   }
@@ -276,38 +333,14 @@ export default function HomePage() {
         ) : (
           <>
             <div className="text-sm text-gray-500 mb-3 mt-4">所有班级 ({classes.length})</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classes.map((cls) => (
-                <div
-                  key={cls.id}
-                  onClick={() => handleClassClick(cls.id)}
-                  className={`bg-white rounded-2xl p-5 shadow-sm cursor-pointer hover:shadow-md transition-all hover:-translate-y-1 active:scale-[0.98] ${cls.isVisited ? 'border-l-4 border-l-blue-500' : ''}`}
+            <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+              {classes.map((cls, index) => (
+                <div 
+                  key={cls.id} 
+                  className="animate-fade-in" 
+                  style={{ animationDelay: `${index * 0.1}s` }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-lg text-gray-800">{cls.name}</span>
-                        {cls.isVisited && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">已访问</span>
-                        )}
-                        {cls.isNew && (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">新</span>
-                        )}
-                      </div>
-                      {cls.description && (
-                        <div className="text-sm text-gray-500 mt-1 line-clamp-2">{cls.description}</div>
-                      )}
-                    </div>
-                    <div className="text-3xl">📚</div>
-                  </div>
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                    <div className="text-xs text-gray-400">
-                      👥 {cls.memberCount} 名成员 · 📅 {new Date(cls.createdAt).toLocaleDateString()}
-                    </div>
-                    <div className="text-blue-500 text-sm font-medium">
-                      进入 →
-                    </div>
-                  </div>
+                  <ClassCard cls={cls} onClassClick={handleClassClick} />
                 </div>
               ))}
             </div>
